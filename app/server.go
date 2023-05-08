@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strings"
 	// Uncomment this block to pass the first stage
 	// "net"
 	// "os"
@@ -35,16 +38,24 @@ func handleConnection(c net.Conn) {
 	defer c.Close()
 	fmt.Printf("Serving %s\n", c.RemoteAddr().String())
 	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
+		value, err := DecodeResp(bufio.NewReader(c))
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		fmt.Printf("recevd  %+v\n", &value)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error decoding RESP: ", err.Error())
 			return
 		}
-		fmt.Printf("recvd  %s\n", netData)
-		result := "-Error invalid cmd\r\n"
-		if netData == "*1\r\n" { // ping
-			result = "+PONG\r\n"
+		command := strings.ToLower(value.Array()[0].String())
+		args := value.Array()[1:]
+		switch command {
+		case "ping":
+			c.Write([]byte("+PONG\r\n"))
+		case "echo":
+			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
+		default:
+			c.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
 		}
-		c.Write([]byte(string(result)))
 	}
 }
