@@ -1,71 +1,48 @@
 package main
 
-import (
-	"fmt"
-	"strconv"
-	"time"
-)
+import "time"
 
-type V struct {
-	value    string
-	expireIn *time.Time
+type Storage struct {
+	data map[string]ValueWithExpiry
 }
 
-type Store struct {
-	storage map[string]V
+type ValueWithExpiry struct {
+	value     string
+	expiresAt time.Time
 }
 
-func NewStore() *Store {
-	return &Store{
-		storage: make(map[string]V),
+func (v ValueWithExpiry) IsExpired() bool {
+	if v.expiresAt.IsZero() {
+		return false
+	}
+	return v.expiresAt.Before(time.Now())
+}
+
+func NewStorage() *Storage {
+	return &Storage{
+		data: make(map[string]ValueWithExpiry),
 	}
 }
 
-func (s *Store) Set(args []Value) (string, error) {
-	key, value, expiry := "", "", ""
-	expireIn := time.Duration(0)
-	if len(args) == 4 {
-		key, value, expiry = args[0].String(), args[1].String(), args[3].String()
-		expiringIN, err := strconv.Atoi(expiry)
-		if err != nil {
-			return "-ERR invalid expire time in SET\r\n", err
-		}
-		expireIn = time.Duration(expiringIN) * time.Millisecond
-	} else {
-		key, value = args[0].String(), args[1].String()
+func (kv *Storage) Get(key string) (string, bool) {
+	valueWithExpiry, ok := kv.data[key]
+	if !ok {
+		return "", false
 	}
-	if expireIn == time.Duration(0) {
-		s.storage[key] = V{value: value}
-		return "OK", nil
+	if valueWithExpiry.IsExpired() {
+		delete(kv.data, key)
+		return "", false
 	}
-	e := time.Now().Add(expireIn)
-	s.storage[key] = V{
-		value:    value,
-		expireIn: &e,
-	}
-	return "OK", nil
+	return valueWithExpiry.value, true
 }
 
-func (s *Store) Get(key string) string {
-	if v, ok := s.storage[key]; ok {
-		if v.expireIn == nil || v.expireIn.After(time.Now()) {
-			return v.value
-		} else {
-			delete(s.storage, key)
-		}
-	}
-	return ""
+func (kv *Storage) Set(key string, value string) {
+	kv.data[key] = ValueWithExpiry{value: value}
 }
 
-func prepareStringResp(s string) []byte {
-	return []byte(fmt.Sprintf("+%s\r\n", s))
-}
-func prepareStringRespWithLength(arg string) []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg))
-}
-func prepareArrayResp(args []Value) []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String()))
-}
-func prepareErrResp() []byte {
-	return []byte("$-1\r\n")
+func (kv *Storage) SetWithExpiry(key string, value string, expiry time.Duration) {
+	kv.data[key] = ValueWithExpiry{
+		value:     value,
+		expiresAt: time.Now().Add(expiry),
+	}
 }

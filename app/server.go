@@ -7,72 +7,71 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
-	// Uncomment this block to pass the first stage
-	// "net"
-	// "os"
+	"strconv"
+	"time"
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
-
-	// Uncomment this block to pass the first stage
-	//
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-
-	store := NewStore()
-
+	storage := NewStorage()
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		go handleConnection(conn, store)
+		go handleConnection(conn, storage)
 	}
 }
 
-func handleConnection(c net.Conn, store *Store) {
-	defer c.Close()
-	fmt.Printf("Serving %s\n", c.RemoteAddr().String())
+func handleConnection(conn net.Conn, storage *Storage) {
+	defer conn.Close()
 	for {
-		value, err := DecodeResp(bufio.NewReader(c))
+		value, err := DecodeRESP(bufio.NewReader(conn))
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		command := strings.ToLower(value.Array()[0].String())
-		args := value.Array()[1:]
-		fmt.Printf("recevd  %+v || %+v", command, args)
 		if err != nil {
 			fmt.Println("Error decoding RESP: ", err.Error())
-			return
+			return // Ignore clients that we fail to read from
 		}
-		
+		command := value.Array()[0].String()
+		args := value.Array()[1:]
 		switch command {
 		case "ping":
-			c.Write(prepareStringResp("PONG"))
+			conn.Write([]byte("+PONG\r\n"))
 		case "echo":
-			c.Write(prepareStringRespWithLength(args[0].String()))
+			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
 		case "set":
-			resp, err := store.Set(args)
-			if err != nil {
-				c.Write(prepareErrResp())
+			if len(args) > 2 {
+				if args[2].String() == "px" {
+					expiryStr := args[3].String()
+					expiryInMilliseconds, err := strconv.Atoi(expiryStr)
+					if err != nil {
+						conn.Write([]byte(fmt.Sprintf("-ERR PX value (%s) is not an integer\r\n", expiryStr)))
+						break
+					}
+					storage.SetWithExpiry(args[0].String(), args[1].String(), time.Duration(expiryInMilliseconds)*time.Millisecond)
+				} else {
+					conn.Write([]byte(fmt.Sprintf("-ERR unknown option for set: %s\r\n", args[2].String())))
+				}
+			} else {
+				storage.Set(args[0].String(), args[1].String())
 			}
-			c.Write(prepareStringResp(resp))
+			conn.Write([]byte("+OK\r\n"))
 		case "get":
-			resp := store.Get(args[0].String())
-			if resp != "" {
-				c.Write(prepareStringResp(resp))
-				return
+			value, found := storage.Get(args[0].String())
+			if found {
+				conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)))
+			} else {
+				conn.Write([]byte("$-1\r\n"))
 			}
-			c.Write(prepareErrResp())
 		default:
-			c.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
+			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
 		}
 	}
 }
