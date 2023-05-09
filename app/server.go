@@ -56,7 +56,7 @@ func handleConnection(c net.Conn) {
 			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
 		case "set":
 			RSet(args[0].String(), args[1].String())
-			resp := "ok"
+			resp := "OK"
 			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
 		case "get":
 			resp := RGet(args[0].String())
