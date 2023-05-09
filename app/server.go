@@ -31,7 +31,7 @@ func main() {
 func handleConnection(conn net.Conn, storage *Storage) {
 	defer conn.Close()
 	for {
-		value, err := DecodeRESP(bufio.NewReader(conn))
+		value, err := DecodeResp(bufio.NewReader(conn))
 		if errors.Is(err, io.EOF) {
 			break
 		}
