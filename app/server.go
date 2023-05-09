@@ -55,7 +55,7 @@ func handleConnection(c net.Conn) {
 		case "echo":
 			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
 		case "set":
-			RSet(args[0].String(), args[1].string())
+			RSet(args[0].String(), args[1].String())
 			resp := "ok"
 			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
 		case "get":
