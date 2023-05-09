@@ -7,7 +7,7 @@ func RSet(key, value string) {
 }
 
 func RGet(key string) string {
-	if val, ok := rMap["foo"]; ok {
+	if val, ok := rMap[key]; ok {
 		return val
 	}
 	return "nil"
