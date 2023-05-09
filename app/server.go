@@ -24,17 +24,20 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+
+	store := NewStore()
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		go handleConnection(conn)
+		go handleConnection(conn, store)
 	}
 }
 
-func handleConnection(c net.Conn) {
+func handleConnection(c net.Conn, store *Store) {
 	defer c.Close()
 	fmt.Printf("Serving %s\n", c.RemoteAddr().String())
 	for {
@@ -51,16 +54,22 @@ func handleConnection(c net.Conn) {
 		args := value.Array()[1:]
 		switch command {
 		case "ping":
-			c.Write([]byte("+PONG\r\n"))
+			c.Write(prepareStringResp("PONG"))
 		case "echo":
-			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
+			c.Write(prepareStringRespWithLength(args[0].String()))
 		case "set":
-			RSet(args[0].String(), args[1].String())
-			resp := "OK"
-			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
+			resp, err := store.Set(args)
+			if err != nil {
+				c.Write(prepareErrResp())
+			}
+			c.Write(prepareStringResp(resp))
 		case "get":
-			resp := RGet(args[0].String())
-			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
+			resp := store.Get(args[0].String())
+			if resp != "" {
+				c.Write(prepareStringResp(resp))
+				return
+			}
+			c.Write(prepareErrResp())
 		default:
 			c.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
 		}
