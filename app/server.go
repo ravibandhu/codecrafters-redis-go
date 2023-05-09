@@ -45,13 +45,14 @@ func handleConnection(c net.Conn, store *Store) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		fmt.Printf("recevd  %+v\n", &value)
+		command := strings.ToLower(value.Array()[0].String())
+		args := value.Array()[1:]
+		fmt.Printf("recevd  %+v || %+v", command, args)
 		if err != nil {
 			fmt.Println("Error decoding RESP: ", err.Error())
 			return
 		}
-		command := strings.ToLower(value.Array()[0].String())
-		args := value.Array()[1:]
+		
 		switch command {
 		case "ping":
 			c.Write(prepareStringResp("PONG"))
