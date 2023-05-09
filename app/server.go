@@ -54,6 +54,13 @@ func handleConnection(c net.Conn) {
 			c.Write([]byte("+PONG\r\n"))
 		case "echo":
 			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(args[0].String()), args[0].String())))
+		case "set":
+			RSet(args[0].String(), args[1].string())
+			resp := "ok"
+			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
+		case "get":
+			resp := RGet(args[0].String())
+			c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(resp), resp)))
 		default:
 			c.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
 		}
